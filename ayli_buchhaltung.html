@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ayli Buchhaltung">
+<meta name="theme-color" content="#7A6A4F">
+<title>Ayli Buchhaltung</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    /* Ayli Marke: Gold #AB9974, Akzent #D7C7AE, Sekundär #E0DBD5, Text schwarz */
+    --burgundy:#7A6A4F; --burgundy-dark:#4A4033; --gold:#AB9974; --gold-soft:#E4D8C2;
+    --rose:#E0DBD5; --rose-light:#F2EEE9; --cream:#FBF9F6;
+    --ink:#1A1A1A; --muted:#8A8172; --line:#E0DBD5;
+    --green:#4A6B4E; --green-bg:#EBF0EB; --red:#9A5B4A; --red-bg:#F3EAE6;
+    --white:#FFFFFF;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; margin:0; padding:0}
+  html,body{height:100%}
+  body{font-family:'Jost',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--cream); color:var(--ink); line-height:1.5; -webkit-font-smoothing:antialiased; padding-bottom:env(safe-area-inset-bottom);}
+  .serif{font-family:'Cormorant Garamond',Georgia,serif}
+  header{background:var(--burgundy); color:var(--white); padding:calc(env(safe-area-inset-top) + 18px) 20px 18px; text-align:center; position:sticky; top:0; z-index:50;}
+  header .title{font-family:'Cormorant Garamond',Georgia,serif; font-size:26px; font-weight:600; letter-spacing:.5px}
+  header .sub{font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--gold-soft); margin-top:2px}
+  main{max-width:480px; margin:0 auto; padding:16px 16px 90px}
+  .monthbar{display:flex; align-items:center; justify-content:space-between; background:var(--white); border:1px solid var(--line); border-radius:12px; padding:8px 6px; margin-bottom:14px}
+  .monthbar button{background:none; border:none; font-size:20px; color:var(--burgundy); width:40px; height:36px; border-radius:8px}
+  .monthbar button:active{background:var(--rose-light)}
+  .monthbar .mlabel{font-weight:500; font-size:15px; flex:1; text-align:center}
+  .summary{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px}
+  .scard{background:var(--white); border:1px solid var(--line); border-radius:14px; padding:14px 12px; text-align:center}
+  .scard .lbl{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px}
+  .scard .val{font-family:'Cormorant Garamond',Georgia,serif; font-size:24px; font-weight:600; margin-top:4px}
+  .scard.income .val{color:var(--green)}
+  .scard.expense .val{color:var(--red)}
+  .profit{background:var(--burgundy); color:var(--white); border-radius:14px; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; margin-bottom:14px}
+  .profit .lbl{font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--gold-soft)}
+  .profit .val{font-family:'Cormorant Garamond',Georgia,serif; font-size:28px; font-weight:600}
+  .addrow{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:18px}
+  .addbtn{border:none; border-radius:14px; padding:16px 10px; font-family:inherit; font-size:15px; font-weight:500; display:flex; align-items:center; justify-content:center; gap:8px; color:var(--white)}
+  .addbtn.inc{background:var(--green)} .addbtn.exp{background:var(--red)}
+  .addbtn:active{transform:scale(.97)}
+  .addbtn .ic{font-size:20px; line-height:1}
+  .listtitle{font-size:12px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin:0 4px 8px}
+  .entry{background:var(--white); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:8px; display:flex; align-items:center; gap:12px}
+  .entry .dot{width:8px; height:8px; border-radius:50%; flex-shrink:0}
+  .entry.inc .dot{background:var(--green)} .entry.exp .dot{background:var(--red)}
+  .entry .info{flex:1; min-width:0}
+  .entry .desc{font-weight:500; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .entry .meta{font-size:12px; color:var(--muted); margin-top:1px}
+  .entry .thumb{width:36px; height:36px; border-radius:8px; object-fit:cover; border:1px solid var(--line); flex-shrink:0}
+  .entry .amt{font-family:'Cormorant Garamond',Georgia,serif; font-size:19px; font-weight:600; white-space:nowrap}
+  .entry.inc .amt{color:var(--green)} .entry.exp .amt{color:var(--red)}
+  .entry .del{background:none; border:none; color:var(--line); font-size:18px; padding:4px; margin-left:2px}
+  .entry .del:active{color:var(--red)}
+  .empty{text-align:center; color:var(--muted); padding:40px 20px; font-size:14px}
+  .empty .big{font-family:'Cormorant Garamond',Georgia,serif; font-size:30px; color:var(--rose); display:block; margin-bottom:6px}
+  .overlay{position:fixed; inset:0; background:rgba(40,20,28,.45); z-index:100; display:none; align-items:flex-end; justify-content:center}
+  .overlay.show{display:flex}
+  .sheet{background:var(--cream); width:100%; max-width:480px; border-radius:22px 22px 0 0; padding:20px 18px calc(env(safe-area-inset-bottom) + 20px); max-height:92vh; overflow-y:auto; animation:slideUp .25s ease}
+  @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  .sheet h2{font-family:'Cormorant Garamond',Georgia,serif; font-size:24px; font-weight:600; text-align:center; margin-bottom:4px}
+  .sheet .sheetsub{text-align:center; font-size:12px; color:var(--muted); margin-bottom:18px}
+  .field{margin-bottom:14px}
+  .field label{display:block; font-size:13px; font-weight:500; color:var(--burgundy); margin-bottom:6px}
+  .field input, .field select{width:100%; border:1px solid var(--line); border-radius:11px; padding:13px 14px; font-family:inherit; font-size:16px; background:var(--white); color:var(--ink); -webkit-appearance:none; appearance:none}
+  .field input:focus, .field select:focus{outline:none; border-color:var(--gold)}
+  .field select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%236B2737' stroke-width='1.5' fill='none'/></svg>"); background-repeat:no-repeat; background-position:right 14px center}
+  .vatrow{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .seg{display:flex; gap:6px}
+  .seg button{flex:1; border:1px solid var(--line); background:var(--white); border-radius:10px; padding:11px 0; font-family:inherit; font-size:14px; font-weight:500; color:var(--muted)}
+  .seg button.active{background:var(--burgundy); color:var(--white); border-color:var(--burgundy)}
+  .photobtn{width:100%; border:1.5px dashed var(--gold); background:var(--rose-light); border-radius:12px; padding:14px; font-family:inherit; font-size:14px; font-weight:500; color:var(--burgundy); display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:14px}
+  .photobtn:active{background:var(--rose)}
+  .photoprev{position:relative; margin-bottom:14px; display:none}
+  .photoprev.show{display:block}
+  .photoprev img{width:100%; border-radius:12px; border:1px solid var(--line); max-height:200px; object-fit:cover}
+  .photoprev .rm{position:absolute; top:8px; right:8px; background:var(--burgundy); color:#fff; border:none; width:32px; height:32px; border-radius:50%; font-size:18px}
+  .calc{background:var(--rose-light); border-radius:11px; padding:11px 14px; font-size:13px; color:var(--burgundy); margin-bottom:14px; display:flex; justify-content:space-between}
+  .calc b{font-weight:600}
+  .savebtn{width:100%; border:none; border-radius:13px; padding:16px; font-family:inherit; font-size:16px; font-weight:500; color:var(--white); margin-top:4px}
+  .savebtn.inc{background:var(--green)} .savebtn.exp{background:var(--red)}
+  .savebtn:active{transform:scale(.98)}
+  .cancel{width:100%; background:none; border:none; color:var(--muted); font-family:inherit; font-size:14px; padding:14px; margin-top:4px}
+  .footer{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:20px}
+  .footer button{background:var(--white); border:1px solid var(--line); border-radius:11px; padding:12px; font-family:inherit; font-size:13px; font-weight:500; color:var(--burgundy); display:flex; align-items:center; justify-content:center; gap:6px}
+  .footer button:active{background:var(--rose-light)}
+  .footer .wide{grid-column:1 / -1; background:var(--burgundy); color:#fff; border-color:var(--burgundy); font-size:14px; padding:14px}
+  .note{font-size:11px; color:var(--muted); text-align:center; margin-top:14px; line-height:1.5; padding:0 10px}
+  .bigview{position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:200; display:none; align-items:center; justify-content:center; padding:20px}
+  .bigview.show{display:flex}
+  .bigview img{max-width:100%; max-height:90vh; border-radius:8px}
+  .toast{position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:var(--burgundy); color:#fff; padding:12px 22px; border-radius:30px; font-size:14px; z-index:300; opacity:0; transition:opacity .3s; pointer-events:none; max-width:90%; text-align:center}
+  .toast.show{opacity:1}
+  .monthbanner{background:var(--rose-light); border:1px solid var(--rose); border-radius:11px; padding:9px 14px; margin-bottom:14px; font-size:12px; color:var(--burgundy); text-align:center; line-height:1.4}
+  .monthbanner b{font-weight:600}
+  .scopeswitch{display:flex; background:var(--burgundy-dark); border-radius:12px; padding:4px; margin-bottom:14px; gap:4px}
+  .scopeswitch button{flex:1; border:none; background:none; color:rgba(255,255,255,.6); font-family:inherit; font-size:14px; font-weight:600; padding:11px 0; border-radius:9px; letter-spacing:.5px}
+  .scopeswitch button.active{background:var(--white); color:var(--burgundy)}
+  .tabs{display:flex; gap:6px; margin:0 0 12px}
+  .tabs button{flex:1; border:1px solid var(--line); background:var(--white); border-radius:10px; padding:9px 0; font-family:inherit; font-size:13px; font-weight:500; color:var(--muted)}
+  .tabs button.active{background:var(--burgundy); color:var(--white); border-color:var(--burgundy)}
+  .dayblock{background:var(--white); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:8px}
+  .dayblock .dhead{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px}
+  .dayblock .ddate{font-weight:500; font-size:14px; color:var(--burgundy)}
+  .dayblock .dsum{font-family:'Cormorant Garamond',Georgia,serif; font-size:18px; font-weight:600; color:var(--green)}
+  .dayblock .dcount{font-size:11px; color:var(--muted)}
+  .dayblock .dbar{height:6px; background:var(--rose-light); border-radius:3px; overflow:hidden; margin-top:6px}
+  .dayblock .dbar span{display:block; height:100%; background:var(--gold)}
+</style>
+</head>
+<body>
+<header>
+  <div class="title serif">Ayli Buchhaltung</div>
+  <div class="sub">Geschäftlich · Einnahmen &amp; Ausgaben</div>
+</header>
+
+<main>
+  <div class="scopeswitch" id="scopeSwitch">
+    <button data-scope="betrieb" class="active">💼 Betrieb</button>
+    <button data-scope="privat">🏠 Privat</button>
+  </div>
+
+  <div class="monthbar">
+    <button id="prevM" aria-label="Vorheriger Monat">‹</button>
+    <div class="mlabel" id="mLabel">Juni 2026</div>
+    <button id="nextM" aria-label="Nächster Monat">›</button>
+  </div>
+
+  <div class="summary">
+    <div class="scard income"><div class="lbl">Einnahmen</div><div class="val" id="sumIn">0,00 €</div></div>
+    <div class="scard expense"><div class="lbl">Ausgaben</div><div class="val" id="sumOut">0,00 €</div></div>
+  </div>
+  <div class="profit"><div class="lbl">Gewinn (netto)</div><div class="val" id="sumProfit">0,00 €</div></div>
+
+  <div class="monthbanner" id="monthBanner">Du erfasst gerade <b>Juni 2026</b>. Jeder Monat ist eine eigene Abrechnung.</div>
+
+  <div class="addrow">
+    <button class="addbtn inc" id="addInc"><span class="ic">+</span> Einnahme</button>
+    <button class="addbtn exp" id="addExp"><span class="ic">+</span> Ausgabe</button>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button data-tab="buchungen" class="active">Buchungen</button>
+    <button data-tab="tag">Umsatz pro Tag</button>
+  </div>
+
+  <div id="list"></div>
+  <div id="dayList" style="display:none"></div>
+
+  <div class="footer">
+    <button id="exportBtn">⬇ Nur CSV</button>
+    <button id="allBtn">📅 Ganzes Jahr</button>
+    <button class="wide" id="monthEndBtn">📦 Monatsabschluss für Buchhalterin</button>
+  </div>
+  <div class="note">Tipp: Beträge als <b>Netto</b> eingeben – MwSt. wird automatisch berechnet. Die App speichert alles nur auf diesem Gerät. Mache am Monatsende den Abschluss und sende ihn deiner Buchhalterin – das ist gleichzeitig deine Sicherung.</div>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="sheet">
+    <h2 id="sheetTitle">Neue Ausgabe</h2>
+    <div class="sheetsub" id="sheetSub">Netto-Betrag eingeben</div>
+    <div class="field">
+      <label>Beschreibung</label>
+      <input type="text" id="fDesc" placeholder="z.B. Materialeinkauf" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Datum</label>
+      <input type="date" id="fDate">
+    </div>
+    <div class="field">
+      <label>Kategorie</label>
+      <select id="fCat"></select>
+    </div>
+    <div class="vatrow">
+      <div class="field">
+        <label>Netto-Betrag (€)</label>
+        <input type="number" id="fAmount" inputmode="decimal" placeholder="0,00" step="0.01">
+      </div>
+      <div class="field">
+        <label>MwSt.-Satz</label>
+        <div class="seg" id="vatSeg">
+          <button data-v="19" class="active">19%</button>
+          <button data-v="7">7%</button>
+          <button data-v="0">0%</button>
+        </div>
+      </div>
+    </div>
+    <button class="photobtn" id="photoBtn">📸 Beleg fotografieren / hochladen</button>
+    <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
+    <div class="photoprev" id="photoPrev"><img id="photoImg" alt="Beleg"><button class="rm" id="photoRm" aria-label="Entfernen">×</button></div>
+    <div class="calc">
+      <span>MwSt: <b id="calcVat">0,00 €</b></span>
+      <span>Brutto: <b id="calcGross">0,00 €</b></span>
+    </div>
+    <button class="savebtn exp" id="saveBtn">Speichern</button>
+    <button class="cancel" id="cancelBtn">Abbrechen</button>
+  </div>
+</div>
+
+<div class="bigview" id="bigview"><img id="bigImg" alt="Beleg gross"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const CATS = {
+  betrieb: {
+    income: ["Kosmetikbehandlungen","Produktverkauf","Provisionen","Sonstige Einnahmen"],
+    expense: ["Wareneinkauf","Miete","Strom/Gas/Wasser","Werbung/Marketing","Versicherungen","Fahrtkosten/Kfz","Arbeitsmittel/Geräte","Fortbildung","Telefon/Internet","Büromaterial","Gebühren/Software","Steuerberater","Sonstige Ausgaben"]
+  },
+  privat: {
+    income: ["Gehalt/Lohn","Sonstige Einnahmen"],
+    expense: ["Lebensmitteleinkauf","Wohnkosten (Strom, Miete, Wasser)","Haut- und Körperpflege","Kinder","Taxi und Autokosten","Versicherung","Hobby und Freizeit","Kreditkarte","Parkplatz","Sparkonto","Spesen","Sonstiges"]
+  }
+};
+const MONTHS = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+const KEY = "ayli_buchhaltung_v2";
+
+let data = load();
+let view = new Date();
+let viewAll = false;
+let scope = "betrieb";
+let editType = "expense";
+let editVat = 19;
+let editPhoto = null;
+
+function load(){ try{ return JSON.parse(localStorage.getItem(KEY)) || []; }catch(e){ return []; } }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){ toast("Speicher voll! Bitte Monatsabschluss machen und alte Belege löschen."); } }
+function fmt(n){ return n.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2}) + " €"; }
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2800); }
+
+function inView(e){
+  const sc = e.scope || "betrieb";
+  if(sc !== scope) return false;
+  if(viewAll) return new Date(e.date).getFullYear() === view.getFullYear();
+  const d = new Date(e.date);
+  return d.getFullYear()===view.getFullYear() && d.getMonth()===view.getMonth();
+}
+
+function render(){
+  document.getElementById("mLabel").textContent = viewAll ? "Jahr " + view.getFullYear() : MONTHS[view.getMonth()] + " " + view.getFullYear();
+  const banner = document.getElementById("monthBanner");
+  const scopeLabel = scope==="betrieb" ? "Betrieb (Geschäft)" : "Privat";
+  if(viewAll){ banner.innerHTML = "Du siehst <b>"+scopeLabel+"</b> · ganzes Jahr "+view.getFullYear()+". Für die Buchhalterin bitte einzelne Monate abschliessen."; }
+  else { banner.innerHTML = "<b>"+scopeLabel+"</b> · "+MONTHS[view.getMonth()]+" "+view.getFullYear()+". Jeder Monat ist eine eigene Abrechnung."; }
+  const rows = data.filter(inView).sort((a,b)=> new Date(b.date)-new Date(a.date));
+  let sin=0, sout=0;
+  rows.forEach(e=>{ if(e.type==="income") sin+=e.net; else sout+=e.net; });
+  document.getElementById("sumIn").textContent = fmt(sin);
+  document.getElementById("sumOut").textContent = fmt(sout);
+  document.getElementById("sumProfit").textContent = fmt(sin - sout);
+  const list = document.getElementById("list");
+  if(rows.length===0){ list.innerHTML = '<div class="empty"><span class="big serif">∅</span>Noch keine Buchungen in diesem Zeitraum.<br>Tippe oben auf + um zu starten.</div>'; }
+  else {
+  list.innerHTML = rows.map(e=>{
+    const d = new Date(e.date);
+    const ds = d.getDate()+". "+MONTHS[d.getMonth()].slice(0,3);
+    const thumb = e.photo ? `<img class="thumb" src="${e.photo}" data-big="${e.id}" alt="Beleg">` : "";
+    return `<div class="entry ${e.type==='income'?'inc':'exp'}">
+      <span class="dot"></span>
+      <div class="info"><div class="desc">${esc(e.desc)}</div><div class="meta">${ds} · ${esc(e.cat)} · ${e.vat}% MwSt${e.photo?' · 📎':''}</div></div>
+      ${thumb}
+      <div class="amt">${e.type==='income'?'+':'–'}${fmt(e.net)}</div>
+      <button class="del" data-id="${e.id}" aria-label="Löschen">×</button>
+    </div>`;
+  }).join("");
+  list.querySelectorAll(".del").forEach(b=>{ b.onclick = ()=>{ if(confirm("Diese Buchung löschen?")){ data = data.filter(x=>x.id!==b.dataset.id); save(); render(); } }; });
+  list.querySelectorAll(".thumb").forEach(t=>{ t.onclick = ()=>{ const e=data.find(x=>x.id===t.dataset.big); if(e&&e.photo){ document.getElementById("bigImg").src=e.photo; document.getElementById("bigview").classList.add("show"); } }; });
+  }
+  renderDays(rows);
+}
+
+function renderDays(rows){
+  const dl = document.getElementById("dayList");
+  const incRows = rows.filter(e=>e.type==="income");
+  if(incRows.length===0){ dl.innerHTML = '<div class="empty"><span class="big serif">∅</span>Noch keine Einnahmen in diesem Zeitraum.<br>Der Tagesumsatz erscheint, sobald du Einnahmen erfasst.</div>'; return; }
+  const byDay = {};
+  incRows.forEach(e=>{ (byDay[e.date] = byDay[e.date] || {sum:0,count:0}); byDay[e.date].sum += e.net; byDay[e.date].count++; });
+  const days = Object.keys(byDay).sort((a,b)=> new Date(b)-new Date(a));
+  const maxSum = Math.max(...days.map(d=>byDay[d].sum));
+  dl.innerHTML = days.map(date=>{
+    const d = new Date(date);
+    const wd = ["So","Mo","Di","Mi","Do","Fr","Sa"][d.getDay()];
+    const ds = wd+", "+d.getDate()+". "+MONTHS[d.getMonth()].slice(0,3);
+    const pct = Math.round(byDay[date].sum/maxSum*100);
+    const noun = scope==="betrieb" ? (byDay[date].count===1?'Behandlung/Verkauf':'Behandlungen/Verkäufe') : (byDay[date].count===1?'Einnahme':'Einnahmen');
+    return `<div class="dayblock">
+      <div class="dhead"><span class="ddate">${ds}</span><span class="dsum">${fmt(byDay[date].sum)}</span></div>
+      <div class="dcount">${byDay[date].count} ${noun}</div>
+      <div class="dbar"><span style="width:${pct}%"></span></div>
+    </div>`;
+  }).join("");
+}
+function esc(s){ return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+document.getElementById("bigview").onclick=()=>document.getElementById("bigview").classList.remove("show");
+
+function openSheet(type){
+  editType = type; editVat = type==="income" ? 0 : 19; editPhoto = null;
+  document.getElementById("sheetTitle").textContent = type==="income" ? "Neue Einnahme" : "Neue Ausgabe";
+  document.getElementById("sheetSub").textContent = "Netto-Betrag eingeben – MwSt wird berechnet";
+  const cat = document.getElementById("fCat");
+  cat.innerHTML = CATS[scope][type].map(c=>`<option>${c}</option>`).join("");
+  document.getElementById("fDesc").value = "";
+  document.getElementById("fAmount").value = "";
+  document.getElementById("fDate").value = new Date().toISOString().slice(0,10);
+  document.getElementById("photoPrev").classList.remove("show");
+  document.getElementById("photoImg").src = "";
+  const sb = document.getElementById("saveBtn");
+  sb.className = "savebtn " + (type==="income"?"inc":"exp"); sb.textContent = "Speichern";
+  document.querySelectorAll("#vatSeg button").forEach(b=> b.classList.toggle("active", +b.dataset.v===editVat));
+  updateCalc();
+  document.getElementById("overlay").classList.add("show");
+}
+function closeSheet(){ document.getElementById("overlay").classList.remove("show"); }
+function updateCalc(){
+  const net = parseFloat((document.getElementById("fAmount").value||"0").replace(",","."))||0;
+  const vat = net * editVat/100;
+  document.getElementById("calcVat").textContent = fmt(vat);
+  document.getElementById("calcGross").textContent = fmt(net+vat);
+}
+
+document.getElementById("addInc").onclick = ()=>openSheet("income");
+document.getElementById("addExp").onclick = ()=>openSheet("expense");
+document.getElementById("cancelBtn").onclick = closeSheet;
+document.getElementById("overlay").onclick = (e)=>{ if(e.target.id==="overlay") closeSheet(); };
+document.getElementById("fAmount").addEventListener("input", updateCalc);
+document.querySelectorAll("#vatSeg button").forEach(b=>{ b.onclick = ()=>{ editVat = +b.dataset.v; document.querySelectorAll("#vatSeg button").forEach(x=>x.classList.remove("active")); b.classList.add("active"); updateCalc(); }; });
+
+document.getElementById("photoBtn").onclick = ()=>document.getElementById("photoInput").click();
+document.getElementById("photoRm").onclick = ()=>{ editPhoto=null; document.getElementById("photoPrev").classList.remove("show"); document.getElementById("photoImg").src=""; };
+document.getElementById("photoInput").addEventListener("change", function(){
+  const file = this.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const max = 1000; let w=img.width, h=img.height;
+      if(w>h && w>max){ h=h*max/w; w=max; } else if(h>max){ w=w*max/h; h=max; }
+      const canvas=document.createElement("canvas"); canvas.width=w; canvas.height=h;
+      canvas.getContext("2d").drawImage(img,0,0,w,h);
+      editPhoto = canvas.toDataURL("image/jpeg",0.6);
+      document.getElementById("photoImg").src = editPhoto;
+      document.getElementById("photoPrev").classList.add("show");
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+  this.value = "";
+});
+
+document.getElementById("saveBtn").onclick = ()=>{
+  const desc = document.getElementById("fDesc").value.trim();
+  const net = parseFloat((document.getElementById("fAmount").value||"0").replace(",","."))||0;
+  if(!desc){ alert("Bitte eine Beschreibung eingeben."); return; }
+  if(net<=0){ alert("Bitte einen gültigen Betrag eingeben."); return; }
+  data.push({ id: uid(), scope: scope, type: editType, desc, date: document.getElementById("fDate").value, cat: document.getElementById("fCat").value, net: Math.round(net*100)/100, vat: editVat, photo: editPhoto });
+  save(); closeSheet(); render();
+};
+
+document.querySelectorAll("#scopeSwitch button").forEach(b=>{
+  b.onclick = ()=>{
+    scope = b.dataset.scope;
+    document.querySelectorAll("#scopeSwitch button").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    document.querySelector(".sub").textContent = scope==="betrieb" ? "Geschäftlich · Einnahmen & Ausgaben" : "Privat · Einnahmen & Ausgaben";
+    render();
+  };
+});
+
+document.getElementById("prevM").onclick = ()=>{ viewAll=false; view.setMonth(view.getMonth()-1); render(); };
+document.getElementById("nextM").onclick = ()=>{ viewAll=false; view.setMonth(view.getMonth()+1); render(); };
+document.getElementById("allBtn").onclick = ()=>{ viewAll = !viewAll; render(); };
+
+document.querySelectorAll("#tabs button").forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll("#tabs button").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    const isDay = b.dataset.tab==="tag";
+    document.getElementById("list").style.display = isDay ? "none" : "block";
+    document.getElementById("dayList").style.display = isDay ? "block" : "none";
+  };
+});
+
+function buildCSV(rows){
+  let csv = "Datum;Typ;Beschreibung;Kategorie;Netto;MwSt-Satz;MwSt-Betrag;Brutto;Beleg-Datei\n";
+  rows.forEach((e,i)=>{
+    const gross = (e.net + e.net*e.vat/100);
+    const belegName = e.photo ? "Beleg_"+String(i+1).padStart(3,"0")+".jpg" : "";
+    csv += [e.date, e.type==="income"?"Einnahme":"Ausgabe", '"'+e.desc.replace(/"/g,'""')+'"', e.cat, e.net.toFixed(2).replace(".",","), e.vat+"%", (e.net*e.vat/100).toFixed(2).replace(".",","), gross.toFixed(2).replace(".",","), belegName].join(";") + "\n";
+  });
+  return csv;
+}
+function periodLabel(){ const s = scope==="betrieb"?"Betrieb":"Privat"; return s+"_"+(viewAll ? "Jahr_"+view.getFullYear() : MONTHS[view.getMonth()]+"_"+view.getFullYear()); }
+
+document.getElementById("exportBtn").onclick = ()=>{
+  const rows = data.filter(inView).sort((a,b)=> new Date(a.date)-new Date(b.date));
+  if(rows.length===0){ alert("Keine Buchungen zum Exportieren in diesem Zeitraum."); return; }
+  download(new Blob(["\ufeff"+buildCSV(rows)],{type:"text/csv;charset=utf-8"}), "Ayli_Buchhaltung_"+periodLabel()+".csv");
+};
+
+document.getElementById("monthEndBtn").onclick = async ()=>{
+  const rows = data.filter(inView).sort((a,b)=> new Date(a.date)-new Date(b.date));
+  if(rows.length===0){ alert("Keine Buchungen in diesem Zeitraum."); return; }
+  toast("Monatsabschluss wird erstellt…");
+  const zip = new JSZip();
+  zip.file("Buchhaltung_"+periodLabel()+".csv", "\ufeff"+buildCSV(rows));
+  let sin=0,sout=0; rows.forEach(e=>{ if(e.type==="income")sin+=e.net; else sout+=e.net; });
+  let sum = "MONATSABSCHLUSS ("+(scope==="betrieb"?"BETRIEB":"PRIVAT")+") – "+periodLabel().replace(/_/g," ")+"\n\n";
+  sum += "Einnahmen (netto): "+fmt(sin)+"\nAusgaben (netto): "+fmt(sout)+"\nGewinn (netto): "+fmt(sin-sout)+"\n\nAnzahl Buchungen: "+rows.length+"\n";
+  const incRows = rows.filter(e=>e.type==="income");
+  if(incRows.length){
+    const byDay={}; incRows.forEach(e=>{ (byDay[e.date]=byDay[e.date]||{sum:0,count:0}); byDay[e.date].sum+=e.net; byDay[e.date].count++; });
+    sum += "\n--- UMSATZ PRO TAG ---\n";
+    Object.keys(byDay).sort().forEach(d=>{ sum += d+": "+fmt(byDay[d].sum)+"  ("+byDay[d].count+" Buchung(en))\n"; });
+  }
+  zip.file("Zusammenfassung_"+periodLabel()+".txt", sum);
+  const belege = zip.folder("Belege");
+  rows.forEach((e,i)=>{ if(e.photo){ const b64=e.photo.split(",")[1]; belege.file("Beleg_"+String(i+1).padStart(3,"0")+".jpg", b64, {base64:true}); } });
+  const blob = await zip.generateAsync({type:"blob"});
+  download(blob, "Ayli_Monatsabschluss_"+periodLabel()+".zip");
+  setTimeout(()=>toast("Fertig! Jetzt per E-Mail an deine Buchhalterin senden."),500);
+};
+
+function download(blob, name){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+render();
+</script>
+</body>
+</html>
