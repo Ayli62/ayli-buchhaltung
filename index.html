@@ -11,7 +11,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%237A6A4F'/%3E%3Ctext x='50' y='68' font-family='Georgia,serif' font-size='52' fill='%23fff' text-anchor='middle'%3EA%3C/text%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.json">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  // ===== Supabase Konfiguration (Ayli) =====
+  const SUPABASE_URL = "https://dpifbtbqdnahfmlwwwsa.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_d1c0zRSlCKWC98zP9eCU4Q_Zql2RthE";
+</script>
 <style>
   :root{
     /* Ayli Marke: Gold #AB9974, Akzent #D7C7AE, Sekundär #E0DBD5, Text schwarz */
@@ -113,12 +121,48 @@
   .dayblock .dcount{font-size:11px; color:var(--muted)}
   .dayblock .dbar{height:6px; background:var(--rose-light); border-radius:3px; overflow:hidden; margin-top:6px}
   .dayblock .dbar span{display:block; height:100%; background:var(--gold)}
+  /* Login screen */
+  .login{position:fixed; inset:0; background:var(--cream); z-index:500; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center}
+  .login.hide{display:none}
+  .login .logo{width:72px; height:72px; border-radius:20px; background:var(--burgundy); color:#fff; display:flex; align-items:center; justify-content:center; font-family:'Cormorant Garamond',Georgia,serif; font-size:42px; font-weight:600; margin-bottom:18px}
+  .login h1{font-family:'Cormorant Garamond',Georgia,serif; font-size:30px; font-weight:600; color:var(--burgundy); margin-bottom:4px}
+  .login p{font-size:13px; color:var(--muted); margin-bottom:24px; max-width:300px}
+  .login .box{background:var(--white); border:1px solid var(--line); border-radius:16px; padding:20px; width:100%; max-width:340px}
+  .login input{width:100%; border:1px solid var(--line); border-radius:11px; padding:14px; font-family:inherit; font-size:16px; margin-bottom:12px; background:var(--cream)}
+  .login input:focus{outline:none; border-color:var(--gold)}
+  .login .lbtn{width:100%; border:none; border-radius:12px; padding:15px; font-family:inherit; font-size:16px; font-weight:500; color:#fff; background:var(--burgundy); margin-bottom:8px}
+  .login .lbtn:active{transform:scale(.98)}
+  .login .lbtn.sec{background:none; color:var(--burgundy); border:1px solid var(--line); font-weight:400; font-size:14px}
+  .login .msg{font-size:13px; margin-top:10px; min-height:18px}
+  .login .msg.err{color:var(--red)} .login .msg.ok{color:var(--green)}
+  .syncdot{position:fixed; top:calc(env(safe-area-inset-top) + 14px); right:14px; z-index:60; font-size:11px; color:var(--gold-soft); display:flex; align-items:center; gap:5px}
+  .syncdot .d{width:7px; height:7px; border-radius:50%; background:var(--gold-soft)}
+  .syncdot.saving .d{background:#E8B84B; animation:pulse 1s infinite}
+  .syncdot.err .d{background:#E06B5A}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .logoutbtn{background:none; border:none; color:var(--gold-soft); font-size:11px; text-decoration:underline; margin-top:8px}
 </style>
 </head>
 <body>
+<div class="login" id="loginScreen">
+  <div class="logo serif">A</div>
+  <h1 class="serif">Ayli Buchhaltung</h1>
+  <p>Melde dich an, damit deine Daten auf allen Geräten synchron sind.</p>
+  <div class="box">
+    <input type="email" id="loginEmail" placeholder="E-Mail" autocomplete="email">
+    <input type="password" id="loginPass" placeholder="Passwort" autocomplete="current-password">
+    <button class="lbtn" id="loginBtn">Anmelden</button>
+    <button class="lbtn sec" id="signupBtn">Neues Konto erstellen</button>
+    <div class="msg" id="loginMsg"></div>
+  </div>
+</div>
+
+<div class="syncdot" id="syncDot"><span class="d"></span><span id="syncTxt">synchron</span></div>
+
 <header>
   <div class="title serif">Ayli Buchhaltung</div>
   <div class="sub">Geschäftlich · Einnahmen &amp; Ausgaben</div>
+  <button class="logoutbtn" id="logoutBtn">Abmelden</button>
 </header>
 
 <main>
@@ -192,6 +236,10 @@
         </div>
       </div>
     </div>
+    <div class="field">
+      <label>Notiz (optional)</label>
+      <input type="text" id="fNote" placeholder="z.B. Kundin Anna, Rechnung Nr. 12" autocomplete="off">
+    </div>
     <button class="photobtn" id="photoBtn">📸 Beleg fotografieren / hochladen</button>
     <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
     <div class="photoprev" id="photoPrev"><img id="photoImg" alt="Beleg"><button class="rm" id="photoRm" aria-label="Entfernen">×</button></div>
@@ -219,9 +267,7 @@ const CATS = {
   }
 };
 const MONTHS = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
-const KEY = "ayli_buchhaltung_v2";
 
-let data = load();
 let view = new Date();
 let viewAll = false;
 let scope = "betrieb";
@@ -229,11 +275,53 @@ let editType = "expense";
 let editVat = 19;
 let editPhoto = null;
 
-function load(){ try{ return JSON.parse(localStorage.getItem(KEY)) || []; }catch(e){ return []; } }
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){ toast("Speicher voll! Bitte Monatsabschluss machen und alte Belege löschen."); } }
+// ===== Supabase Client & Auth =====
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let currentUser = null;
+const CACHE = "ayli_cache_v4";
+
+let data = loadCache();  // start from local cache; cloud refresh follows after login
+
+function loadCache(){ try{ return JSON.parse(localStorage.getItem(CACHE)) || []; }catch(e){ return []; } }
+function saveCache(){ try{ localStorage.setItem(CACHE, JSON.stringify(data)); }catch(e){} }
 function fmt(n){ return n.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2}) + " €"; }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2800); }
+function setSync(state){ // 'ok' | 'saving' | 'err'
+  const el=document.getElementById("syncDot"); const tx=document.getElementById("syncTxt");
+  el.classList.remove("saving","err");
+  if(state==="saving"){ el.classList.add("saving"); tx.textContent="speichern…"; }
+  else if(state==="err"){ el.classList.add("err"); tx.textContent="offline"; }
+  else { tx.textContent="synchron"; }
+}
+
+// Map DB row (snake) -> app object (used by rest of code)
+function fromRow(r){ return { id:r.id, scope:r.scope, type:r.type, desc:r.description, date:r.date, cat:r.category, net:Number(r.net), vat:r.vat, note:r.note||"", merchant:r.merchant||"", photo:r.photo_path||null }; }
+// Map app object -> DB row for insert
+function toRow(e){ return { scope:e.scope, type:e.type, description:e.desc, date:e.date, category:e.cat, net:e.net, vat:e.vat, note:e.note||null, merchant:e.merchant||null, photo_path:e.photo||null }; }
+
+async function cloudLoad(){
+  if(!currentUser) return;
+  setSync("saving");
+  const { data:rows, error } = await sb.from("transactions").select("*").order("date",{ascending:false});
+  if(error){ setSync("err"); return; }
+  data = rows.map(fromRow);
+  saveCache(); setSync("ok"); render();
+}
+
+async function cloudInsert(e){
+  setSync("saving");
+  const { data:row, error } = await sb.from("transactions").insert(toRow(e)).select().single();
+  if(error){ setSync("err"); toast("Konnte nicht speichern (offline?)"); return null; }
+  setSync("ok"); return fromRow(row);
+}
+
+async function cloudDelete(id){
+  setSync("saving");
+  const { error } = await sb.from("transactions").delete().eq("id", id);
+  if(error){ setSync("err"); toast("Konnte nicht löschen (offline?)"); return false; }
+  setSync("ok"); return true;
+}
 
 function inView(e){
   const sc = e.scope || "betrieb";
@@ -270,7 +358,7 @@ function render(){
       <button class="del" data-id="${e.id}" aria-label="Löschen">×</button>
     </div>`;
   }).join("");
-  list.querySelectorAll(".del").forEach(b=>{ b.onclick = ()=>{ if(confirm("Diese Buchung löschen?")){ data = data.filter(x=>x.id!==b.dataset.id); save(); render(); } }; });
+  list.querySelectorAll(".del").forEach(b=>{ b.onclick = async ()=>{ if(confirm("Diese Buchung löschen?")){ const ok = await cloudDelete(b.dataset.id); if(ok){ data = data.filter(x=>x.id!==b.dataset.id); saveCache(); render(); } } }; });
   list.querySelectorAll(".thumb").forEach(t=>{ t.onclick = ()=>{ const e=data.find(x=>x.id===t.dataset.big); if(e&&e.photo){ document.getElementById("bigImg").src=e.photo; document.getElementById("bigview").classList.add("show"); } }; });
   }
   renderDays(rows);
@@ -309,11 +397,12 @@ function openSheet(type){
   cat.innerHTML = CATS[scope][type].map(c=>`<option>${c}</option>`).join("");
   document.getElementById("fDesc").value = "";
   document.getElementById("fAmount").value = "";
+  if(document.getElementById("fNote")) document.getElementById("fNote").value = "";
   document.getElementById("fDate").value = new Date().toISOString().slice(0,10);
   document.getElementById("photoPrev").classList.remove("show");
   document.getElementById("photoImg").src = "";
-  const sb = document.getElementById("saveBtn");
-  sb.className = "savebtn " + (type==="income"?"inc":"exp"); sb.textContent = "Speichern";
+  const sbtn = document.getElementById("saveBtn");
+  sbtn.className = "savebtn " + (type==="income"?"inc":"exp"); sbtn.textContent = "Speichern";
   document.querySelectorAll("#vatSeg button").forEach(b=> b.classList.toggle("active", +b.dataset.v===editVat));
   updateCalc();
   document.getElementById("overlay").classList.add("show");
@@ -355,13 +444,15 @@ document.getElementById("photoInput").addEventListener("change", function(){
   this.value = "";
 });
 
-document.getElementById("saveBtn").onclick = ()=>{
+document.getElementById("saveBtn").onclick = async ()=>{
   const desc = document.getElementById("fDesc").value.trim();
   const net = parseFloat((document.getElementById("fAmount").value||"0").replace(",","."))||0;
   if(!desc){ alert("Bitte eine Beschreibung eingeben."); return; }
   if(net<=0){ alert("Bitte einen gültigen Betrag eingeben."); return; }
-  data.push({ id: uid(), scope: scope, type: editType, desc, date: document.getElementById("fDate").value, cat: document.getElementById("fCat").value, net: Math.round(net*100)/100, vat: editVat, photo: editPhoto });
-  save(); closeSheet(); render();
+  const entry = { scope: scope, type: editType, desc, date: document.getElementById("fDate").value, cat: document.getElementById("fCat").value, net: Math.round(net*100)/100, vat: editVat, note: (document.getElementById("fNote")?document.getElementById("fNote").value.trim():""), photo: editPhoto };
+  closeSheet();
+  const saved = await cloudInsert(entry);
+  if(saved){ data.unshift(saved); saveCache(); render(); }
 };
 
 document.querySelectorAll("#scopeSwitch button").forEach(b=>{
@@ -436,7 +527,64 @@ function download(blob, name){
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
 
-render();
+// ===== Authentifizierung & Start =====
+const loginScreen = document.getElementById("loginScreen");
+const loginMsg = document.getElementById("loginMsg");
+
+function showApp(){ loginScreen.classList.add("hide"); }
+function showLogin(){ loginScreen.classList.remove("hide"); }
+function setMsg(txt, ok){ loginMsg.textContent = txt; loginMsg.className = "msg " + (ok?"ok":"err"); }
+
+document.getElementById("loginBtn").onclick = async ()=>{
+  const email = document.getElementById("loginEmail").value.trim();
+  const pass = document.getElementById("loginPass").value;
+  if(!email || !pass){ setMsg("Bitte E-Mail und Passwort eingeben.", false); return; }
+  setMsg("Anmeldung läuft…", true);
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if(error){ setMsg("Anmeldung fehlgeschlagen: " + error.message, false); }
+};
+
+document.getElementById("signupBtn").onclick = async ()=>{
+  const email = document.getElementById("loginEmail").value.trim();
+  const pass = document.getElementById("loginPass").value;
+  if(!email || !pass){ setMsg("Bitte E-Mail und Passwort eingeben.", false); return; }
+  if(pass.length < 6){ setMsg("Passwort muss mindestens 6 Zeichen haben.", false); return; }
+  setMsg("Konto wird erstellt…", true);
+  const { error } = await sb.auth.signUp({ email, password: pass });
+  if(error){ setMsg("Fehler: " + error.message, false); }
+  else { setMsg("Konto erstellt! Du kannst dich jetzt anmelden.", true); }
+};
+
+document.getElementById("logoutBtn").onclick = async ()=>{
+  if(confirm("Wirklich abmelden?")){ await sb.auth.signOut(); data=[]; saveCache(); render(); }
+};
+
+// React to login state changes
+sb.auth.onAuthStateChange((event, session)=>{
+  if(session && session.user){
+    currentUser = session.user;
+    showApp();
+    cloudLoad();
+  } else {
+    currentUser = null;
+    showLogin();
+  }
+});
+
+// Check existing session on start
+(async ()=>{
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session && session.user){ currentUser = session.user; showApp(); cloudLoad(); }
+  else { showLogin(); }
+  render(); // render from cache immediately
+})();
+
+// PWA: Service Worker registrieren
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("service-worker.js").catch(()=>{});
+  });
+}
 </script>
 </body>
 </html>
