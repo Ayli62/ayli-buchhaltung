@@ -209,7 +209,7 @@
 <div class="overlay" id="overlay">
   <div class="sheet">
     <h2 id="sheetTitle">Neue Ausgabe</h2>
-    <div class="sheetsub" id="sheetSub">Netto-Betrag eingeben</div>
+    <div class="sheetsub" id="sheetSub">Brutto-Betrag eingeben</div>
     <div class="field">
       <label>Beschreibung</label>
       <input type="text" id="fDesc" placeholder="z.B. Materialeinkauf" autocomplete="off">
@@ -224,7 +224,7 @@
     </div>
     <div class="vatrow">
       <div class="field">
-        <label>Netto-Betrag (€)</label>
+        <label>Brutto-Betrag (€)</label>
         <input type="number" id="fAmount" inputmode="decimal" placeholder="0,00" step="0.01">
       </div>
       <div class="field">
@@ -232,8 +232,15 @@
         <div class="seg" id="vatSeg">
           <button data-v="19" class="active">19%</button>
           <button data-v="7">7%</button>
-          <button data-v="0">0%</button>
+          <button data-v="-1">Gemischt</button>
         </div>
+      </div>
+    </div>
+    <div class="field">
+      <label>Zahlungsart</label>
+      <div class="seg" id="paySeg">
+        <button data-p="Bar" class="active">💵 Bar</button>
+        <button data-p="Karte">💳 Karte</button>
       </div>
     </div>
     <div class="field">
@@ -244,8 +251,8 @@
     <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
     <div class="photoprev" id="photoPrev"><img id="photoImg" alt="Beleg"><button class="rm" id="photoRm" aria-label="Entfernen">×</button></div>
     <div class="calc">
+      <span>Netto: <b id="calcNet">0,00 €</b></span>
       <span>MwSt: <b id="calcVat">0,00 €</b></span>
-      <span>Brutto: <b id="calcGross">0,00 €</b></span>
     </div>
     <button class="savebtn exp" id="saveBtn">Speichern</button>
     <button class="cancel" id="cancelBtn">Abbrechen</button>
@@ -273,6 +280,7 @@ let viewAll = false;
 let scope = "betrieb";
 let editType = "expense";
 let editVat = 19;
+let editPay = "Bar";
 let editPhoto = null;
 
 // ===== Supabase Client & Auth =====
@@ -285,6 +293,7 @@ let data = loadCache();  // start from local cache; cloud refresh follows after 
 function loadCache(){ try{ return JSON.parse(localStorage.getItem(CACHE)) || []; }catch(e){ return []; } }
 function saveCache(){ try{ localStorage.setItem(CACHE, JSON.stringify(data)); }catch(e){} }
 function fmt(n){ return n.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2}) + " €"; }
+function vatLabel(v){ return v === -1 ? "Gemischt" : (v + "% MwSt"); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2800); }
 function setSync(state){ // 'ok' | 'saving' | 'err'
@@ -296,9 +305,9 @@ function setSync(state){ // 'ok' | 'saving' | 'err'
 }
 
 // Map DB row (snake) -> app object (used by rest of code)
-function fromRow(r){ return { id:r.id, scope:r.scope, type:r.type, desc:r.description, date:r.date, cat:r.category, net:Number(r.net), vat:r.vat, note:r.note||"", merchant:r.merchant||"", photo:r.photo_path||null }; }
+function fromRow(r){ return { id:r.id, scope:r.scope, type:r.type, desc:r.description, date:r.date, cat:r.category, net:Number(r.net), brutto:(r.brutto!=null?Number(r.brutto):null), vat:r.vat, payment:r.payment||"Bar", note:r.note||"", merchant:r.merchant||"", photo:r.photo_path||null }; }
 // Map app object -> DB row for insert
-function toRow(e){ return { scope:e.scope, type:e.type, description:e.desc, date:e.date, category:e.cat, net:e.net, vat:e.vat, note:e.note||null, merchant:e.merchant||null, photo_path:e.photo||null }; }
+function toRow(e){ return { scope:e.scope, type:e.type, description:e.desc, date:e.date, category:e.cat, net:e.net, brutto:(e.brutto!=null?e.brutto:null), vat:e.vat, payment:e.payment||"Bar", note:e.note||null, merchant:e.merchant||null, photo_path:e.photo||null }; }
 
 async function cloudLoad(){
   if(!currentUser) return;
@@ -352,7 +361,7 @@ function render(){
     const thumb = e.photo ? `<img class="thumb" src="${e.photo}" data-big="${e.id}" alt="Beleg">` : "";
     return `<div class="entry ${e.type==='income'?'inc':'exp'}">
       <span class="dot"></span>
-      <div class="info"><div class="desc">${esc(e.desc)}</div><div class="meta">${ds} · ${esc(e.cat)} · ${e.vat}% MwSt${e.photo?' · 📎':''}</div></div>
+      <div class="info"><div class="desc">${esc(e.desc)}</div><div class="meta">${ds} · ${esc(e.cat)} · ${vatLabel(e.vat)} · ${e.payment==='Karte'?'💳':'💵'} ${esc(e.payment||'Bar')}${e.photo?' · 📎':''}</div></div>
       ${thumb}
       <div class="amt">${e.type==='income'?'+':'–'}${fmt(e.net)}</div>
       <button class="del" data-id="${e.id}" aria-label="Löschen">×</button>
@@ -392,7 +401,7 @@ document.getElementById("bigview").onclick=()=>document.getElementById("bigview"
 function openSheet(type){
   editType = type; editVat = type==="income" ? 0 : 19; editPhoto = null;
   document.getElementById("sheetTitle").textContent = type==="income" ? "Neue Einnahme" : "Neue Ausgabe";
-  document.getElementById("sheetSub").textContent = "Netto-Betrag eingeben – MwSt wird berechnet";
+  document.getElementById("sheetSub").textContent = "Bezahlten Betrag (Brutto) eingeben – Netto wird berechnet";
   const cat = document.getElementById("fCat");
   cat.innerHTML = CATS[scope][type].map(c=>`<option>${c}</option>`).join("");
   document.getElementById("fDesc").value = "";
@@ -404,15 +413,25 @@ function openSheet(type){
   const sbtn = document.getElementById("saveBtn");
   sbtn.className = "savebtn " + (type==="income"?"inc":"exp"); sbtn.textContent = "Speichern";
   document.querySelectorAll("#vatSeg button").forEach(b=> b.classList.toggle("active", +b.dataset.v===editVat));
+  editPay = "Bar";
+  document.querySelectorAll("#paySeg button").forEach(b=> b.classList.toggle("active", b.dataset.p===editPay));
   updateCalc();
   document.getElementById("overlay").classList.add("show");
 }
 function closeSheet(){ document.getElementById("overlay").classList.remove("show"); }
 function updateCalc(){
-  const net = parseFloat((document.getElementById("fAmount").value||"0").replace(",","."))||0;
-  const vat = net * editVat/100;
-  document.getElementById("calcVat").textContent = fmt(vat);
-  document.getElementById("calcGross").textContent = fmt(net+vat);
+  const brutto = parseFloat((document.getElementById("fAmount").value||"0").replace(",","."))||0;
+  const cn = document.getElementById("calcNet");
+  const cv = document.getElementById("calcVat");
+  if(editVat === -1){ // Gemischt: keine Berechnung, Aufteilung später per Beleg
+    cn.textContent = "—";
+    cv.textContent = "später per Beleg";
+    return;
+  }
+  const netto = editVat>0 ? brutto/(1+editVat/100) : brutto;
+  const mwst = brutto - netto;
+  cn.textContent = fmt(netto);
+  cv.textContent = fmt(mwst);
 }
 
 document.getElementById("addInc").onclick = ()=>openSheet("income");
@@ -421,6 +440,7 @@ document.getElementById("cancelBtn").onclick = closeSheet;
 document.getElementById("overlay").onclick = (e)=>{ if(e.target.id==="overlay") closeSheet(); };
 document.getElementById("fAmount").addEventListener("input", updateCalc);
 document.querySelectorAll("#vatSeg button").forEach(b=>{ b.onclick = ()=>{ editVat = +b.dataset.v; document.querySelectorAll("#vatSeg button").forEach(x=>x.classList.remove("active")); b.classList.add("active"); updateCalc(); }; });
+document.querySelectorAll("#paySeg button").forEach(b=>{ b.onclick = ()=>{ editPay = b.dataset.p; document.querySelectorAll("#paySeg button").forEach(x=>x.classList.remove("active")); b.classList.add("active"); }; });
 
 document.getElementById("photoBtn").onclick = ()=>document.getElementById("photoInput").click();
 document.getElementById("photoRm").onclick = ()=>{ editPhoto=null; document.getElementById("photoPrev").classList.remove("show"); document.getElementById("photoImg").src=""; };
@@ -446,10 +466,16 @@ document.getElementById("photoInput").addEventListener("change", function(){
 
 document.getElementById("saveBtn").onclick = async ()=>{
   const desc = document.getElementById("fDesc").value.trim();
-  const net = parseFloat((document.getElementById("fAmount").value||"0").replace(",","."))||0;
+  const brutto = parseFloat((document.getElementById("fAmount").value||"0").replace(",","."))||0;
   if(!desc){ alert("Bitte eine Beschreibung eingeben."); return; }
-  if(net<=0){ alert("Bitte einen gültigen Betrag eingeben."); return; }
-  const entry = { scope: scope, type: editType, desc, date: document.getElementById("fDate").value, cat: document.getElementById("fCat").value, net: Math.round(net*100)/100, vat: editVat, note: (document.getElementById("fNote")?document.getElementById("fNote").value.trim():""), photo: editPhoto };
+  if(brutto<=0){ alert("Bitte einen gültigen Betrag eingeben."); return; }
+  // Aus Brutto den Netto-Betrag berechnen (rückwärts). Bei "Gemischt" wird der
+  // volle Brutto-Betrag gespeichert und später anhand des Belegs aufgeteilt.
+  let net;
+  if(editVat === -1){ net = Math.round(brutto*100)/100; }        // Gemischt: Brutto vorerst als Betrag
+  else if(editVat > 0){ net = Math.round(brutto/(1+editVat/100)*100)/100; } // 19% / 7%
+  else { net = Math.round(brutto*100)/100; }                     // 0% (Einnahmen privat)
+  const entry = { scope: scope, type: editType, desc, date: document.getElementById("fDate").value, cat: document.getElementById("fCat").value, net: net, brutto: Math.round(brutto*100)/100, vat: editVat, payment: editPay, note: (document.getElementById("fNote")?document.getElementById("fNote").value.trim():""), photo: editPhoto };
   closeSheet();
   const saved = await cloudInsert(entry);
   if(saved){ data.unshift(saved); saveCache(); render(); }
@@ -480,11 +506,24 @@ document.querySelectorAll("#tabs button").forEach(b=>{
 });
 
 function buildCSV(rows){
-  let csv = "Datum;Typ;Beschreibung;Kategorie;Netto;MwSt-Satz;MwSt-Betrag;Brutto;Beleg-Datei\n";
+  let csv = "Datum;Typ;Beschreibung;Kategorie;Zahlungsart;Netto;MwSt-Satz;MwSt-Betrag;Brutto;Notiz;Beleg-Datei\n";
   rows.forEach((e,i)=>{
-    const gross = (e.net + e.net*e.vat/100);
     const belegName = e.photo ? "Beleg_"+String(i+1).padStart(3,"0")+".jpg" : "";
-    csv += [e.date, e.type==="income"?"Einnahme":"Ausgabe", '"'+e.desc.replace(/"/g,'""')+'"', e.cat, e.net.toFixed(2).replace(".",","), e.vat+"%", (e.net*e.vat/100).toFixed(2).replace(".",","), gross.toFixed(2).replace(".",","), belegName].join(";") + "\n";
+    let netStr, satzStr, mwstStr, bruttoStr;
+    if(e.vat === -1){
+      // Gemischt: Aufteilung erfolgt später anhand des Belegs
+      const brutto = (e.brutto!=null? e.brutto : e.net);
+      netStr = ""; satzStr = "Gemischt"; mwstStr = "";
+      bruttoStr = brutto.toFixed(2).replace(".",",");
+    } else {
+      const brutto = (e.brutto!=null? e.brutto : e.net + e.net*e.vat/100);
+      const mwst = brutto - e.net;
+      netStr = e.net.toFixed(2).replace(".",",");
+      satzStr = e.vat+"%";
+      mwstStr = mwst.toFixed(2).replace(".",",");
+      bruttoStr = brutto.toFixed(2).replace(".",",");
+    }
+    csv += [e.date, e.type==="income"?"Einnahme":"Ausgabe", '"'+e.desc.replace(/"/g,'""')+'"', e.cat, (e.payment||"Bar"), netStr, satzStr, mwstStr, bruttoStr, '"'+(e.note||"").replace(/"/g,'""')+'"', belegName].join(";") + "\n";
   });
   return csv;
 }
