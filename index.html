@@ -284,7 +284,15 @@ let editPay = "Bar";
 let editPhoto = null;
 
 // ===== Supabase Client & Auth =====
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    persistSession: true,      // Sitzung im Browser speichern
+    autoRefreshToken: true,    // Token automatisch erneuern (verhindert "offline" nach ~1 Std)
+    detectSessionInUrl: true,
+    storage: window.localStorage,
+    storageKey: "ayli-auth"
+  }
+});
 let currentUser = null;
 const CACHE = "ayli_cache_v4";
 
@@ -300,8 +308,19 @@ function setSync(state){ // 'ok' | 'saving' | 'err'
   const el=document.getElementById("syncDot"); const tx=document.getElementById("syncTxt");
   el.classList.remove("saving","err");
   if(state==="saving"){ el.classList.add("saving"); tx.textContent="speichern…"; }
-  else if(state==="err"){ el.classList.add("err"); tx.textContent="offline"; }
+  else if(state==="err"){ el.classList.add("err"); tx.textContent = navigator.onLine ? "Verbindungsfehler" : "offline"; }
   else { tx.textContent="synchron"; }
+}
+
+// Bei abgelaufener Sitzung einmal erneuern und Aktion wiederholen
+async function ensureSession(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ return false; }
+  // Wenn Token bald abläuft, aktiv erneuern
+  const { data, error } = await sb.auth.refreshSession();
+  if(error){ return !!session; } // altes gilt evtl. noch
+  if(data && data.session){ currentUser = data.session.user; }
+  return true;
 }
 
 // Map DB row (snake) -> app object (used by rest of code)
@@ -309,10 +328,20 @@ function fromRow(r){ return { id:r.id, scope:r.scope, type:r.type, desc:r.descri
 // Map app object -> DB row for insert
 function toRow(e){ return { scope:e.scope, type:e.type, description:e.desc, date:e.date, category:e.cat, net:e.net, brutto:(e.brutto!=null?e.brutto:null), vat:e.vat, payment:e.payment||"Bar", note:e.note||null, merchant:e.merchant||null, photo_path:e.photo||null }; }
 
+// Erkennt abgelaufene/ungültige Sitzung an typischen Fehlercodes
+function isAuthError(error){
+  if(!error) return false;
+  const s = (error.code||"") + " " + (error.message||"") + " " + (error.status||"");
+  return /jwt|token|401|expired|Unauthorized|session/i.test(s);
+}
+
 async function cloudLoad(){
   if(!currentUser) return;
   setSync("saving");
-  const { data:rows, error } = await sb.from("transactions").select("*").order("date",{ascending:false});
+  let { data:rows, error } = await sb.from("transactions").select("*").order("date",{ascending:false});
+  if(error && isAuthError(error)){ // Sitzung erneuern und einmal wiederholen
+    if(await ensureSession()){ ({ data:rows, error } = await sb.from("transactions").select("*").order("date",{ascending:false})); }
+  }
   if(error){ setSync("err"); return; }
   data = rows.map(fromRow);
   saveCache(); setSync("ok"); render();
@@ -320,15 +349,21 @@ async function cloudLoad(){
 
 async function cloudInsert(e){
   setSync("saving");
-  const { data:row, error } = await sb.from("transactions").insert(toRow(e)).select().single();
-  if(error){ setSync("err"); toast("Konnte nicht speichern (offline?)"); return null; }
+  let { data:row, error } = await sb.from("transactions").insert(toRow(e)).select().single();
+  if(error && isAuthError(error)){
+    if(await ensureSession()){ ({ data:row, error } = await sb.from("transactions").insert(toRow(e)).select().single()); }
+  }
+  if(error){ setSync("err"); toast("Konnte nicht speichern – bitte erneut versuchen."); return null; }
   setSync("ok"); return fromRow(row);
 }
 
 async function cloudDelete(id){
   setSync("saving");
-  const { error } = await sb.from("transactions").delete().eq("id", id);
-  if(error){ setSync("err"); toast("Konnte nicht löschen (offline?)"); return false; }
+  let { error } = await sb.from("transactions").delete().eq("id", id);
+  if(error && isAuthError(error)){
+    if(await ensureSession()){ ({ error } = await sb.from("transactions").delete().eq("id", id)); }
+  }
+  if(error){ setSync("err"); toast("Konnte nicht löschen – bitte erneut versuchen."); return false; }
   setSync("ok"); return true;
 }
 
@@ -617,6 +652,10 @@ sb.auth.onAuthStateChange((event, session)=>{
   else { showLogin(); }
   render(); // render from cache immediately
 })();
+
+// Automatisch wieder synchronisieren, wenn Verbindung/Fokus zurückkommt
+window.addEventListener("online", ()=>{ if(currentUser) cloudLoad(); });
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden && currentUser) cloudLoad(); });
 
 // PWA: Service Worker registrieren
 if("serviceWorker" in navigator){

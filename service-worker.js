@@ -1,5 +1,7 @@
-// Ayli Buchhaltung – Service Worker (einfaches Offline-Caching der App-Hülle)
-const CACHE = "ayli-app-v4";
+// Ayli Buchhaltung – Service Worker
+// Strategie: App-Dateien "network-first" (immer die neueste Version, wenn online),
+// Supabase & andere fremde Domains werden NIE abgefangen.
+const CACHE = "ayli-app-v5";
 const ASSETS = [
   "./",
   "./index.html",
@@ -22,14 +24,23 @@ self.addEventListener("activate", (e) => {
   self.clients.claim();
 });
 
-// App-Dateien aus dem Cache, alles andere (z. B. Supabase) direkt aus dem Netz
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
-  const sameOrigin = url.origin === self.location.origin;
-  if (sameOrigin) {
-    e.respondWith(
-      caches.match(e.request).then((cached) => cached || fetch(e.request))
-    );
-  }
-  // Supabase & CDN: nicht abfangen, immer live
+
+  // Nur eigene App-Dateien behandeln. Alles Fremde (Supabase, CDN) direkt live lassen.
+  if (url.origin !== self.location.origin) return;
+
+  // Nur GET-Anfragen cachen
+  if (e.request.method !== "GET") return;
+
+  // Network-first: erst Netzwerk (neueste App), bei Offline aus dem Cache
+  e.respondWith(
+    fetch(e.request)
+      .then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
+        return res;
+      })
+      .catch(() => caches.match(e.request))
+  );
 });
